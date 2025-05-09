@@ -33,7 +33,7 @@ jobs:
         cmd: yq -i '.domainNode.image.tag = "${{ github.event.inputs.imageTag }}"' 'k8s/charts/dnaas/values.${{ github.event.inputs.environment }}.yaml'
 
     - name: Create pull request
-      uses: peter-evans/create-pull-request@v4
+      uses: peter-evans/create-pull-request@v7
       with:
         title: "Bump ${{ github.event.inputs.environment }} to ${{ github.event.inputs.imageTag }}"
         commit-message: "Bump ${{ github.event.inputs.environment }} to ${{ github.event.inputs.imageTag }}"
