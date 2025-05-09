@@ -1,1 +1,0 @@
-# earthfast-node
