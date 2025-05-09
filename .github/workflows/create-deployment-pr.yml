@@ -16,7 +16,7 @@ jobs:
   create-deployment-pr:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Declare variables
       id: vars

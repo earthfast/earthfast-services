@@ -20,7 +20,7 @@ jobs:
   create-release-pr:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Update content node
       uses: mikefarah/yq@v4.31.1
