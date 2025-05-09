@@ -1,0 +1,81 @@
+{
+  "EarthfastToken": {
+    "holders": [
+      {
+        "address": "EarthfastRegistry",
+        "balance": "200.0"
+      },
+      {
+        "address": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+        "balance": "900.0"
+      },
+      {
+        "address": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+        "balance": "900.0"
+      }
+    ]
+  },
+  "EarthfastRegistry": {
+    "version": "",
+    "nonce": "4",
+    "lastEpochLength": "604800",
+    "nextEpochLength": "604800",
+    "cuedEpochLength": "604800",
+    "gracePeriod": "86400",
+    "epochSlot": "0"
+  },
+  "EarthfastNodes": {
+    "nodes": [
+      {
+        "id": "0x405787fa12a823e0f2b7631cc41b3ba8828b3321ca811111fa75cd3aa3b30082",
+        "operatorId": "0x290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563",
+        "host": "dev-content-0-1__80.Earthfastlocal.test",
+        "region": "na",
+        "disabled": false,
+        "prices": [
+          "1.0",
+          "1.0"
+        ],
+        "projectIds": [
+          "0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b",
+          "0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b"
+        ]
+      }
+    ]
+  },
+  "EarthfastOperators": {
+    "stakePerNode": "1.0",
+    "operators": [
+      {
+        "id": "0x290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563",
+        "owner": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+        "name": "dev",
+        "email": "dev@Earthfastnetwork.com",
+        "stake": "100.0",
+        "balance": "100.0"
+      }
+    ]
+  },
+  "EarthfastProjects": {
+    "projectCreators": [
+      "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+    ],
+    "projects": [
+      {
+        "id": "0xc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b",
+        "owner": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+        "name": "dev",
+        "email": "webmaster@dev.com",
+        "escrow": "100.0",
+        "reserve": "2.0",
+        "content": "",
+        "checksum": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "metadata": ""
+      }
+    ]
+  },
+  "EarthfastBilling": {
+    "billingNodeIndex": "0",
+    "renewalNodeIndex": "0"
+  }
+}

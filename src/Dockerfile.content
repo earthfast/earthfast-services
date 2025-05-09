@@ -1,0 +1,44 @@
+##
+## Build Node Binary
+##
+FROM golang:1.23 AS build_node
+
+WORKDIR /app
+
+COPY go.mod .
+COPY go.sum .
+RUN go mod download
+
+COPY . .
+
+# Add build arg for git SHA
+ARG GIT_SHA
+ENV GIT_SHA=${GIT_SHA}
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+go build -o /armada-content-node ./cmd/armada-content-node
+
+##
+## Deploy
+##
+FROM debian:12
+
+# Declare the build arg again in the final stage
+ARG GIT_SHA
+
+RUN apt-get update && apt-get install -y nginx gettext-base ca-certificates npm curl && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /
+COPY --from=build_node /armada-content-node /armada-content-node
+
+# Now GIT_SHA will be properly available
+ENV GIT_SHA=${GIT_SHA}
+
+COPY content-node-nginx/nginx-content.conf /etc/nginx/nginx.conf
+RUN mkdir -p /var/cache/nginx
+
+COPY content-node-nginx/start.sh /start.sh
+RUN chmod +x /start.sh
+
+EXPOSE 80
+ENTRYPOINT ["/start.sh"]

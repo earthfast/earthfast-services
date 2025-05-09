@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+set -e
+
+# Ensure ENVIRONMENT is set, default to dev.
+if [ -z $ENVIRONMENT ]; then
+  export ENVIRONMENT=dev
+fi
+>&2 echo "Environment: $ENVIRONMENT"
+
+# ensure NUM_CONTENT_NODES is set
+if [ -z $NUM_CONTENT_NODES ]; then
+  export NUM_CONTENT_NODES=10
+fi
+>&2 echo "Number of content nodes: $NUM_CONTENT_NODES"
+
+# generate docker-compose.yml and data/$ENVIRONMENT.json
+# generate docker-compose.yml
+  sh docker-compose-generate.sh $NUM_CONTENT_NODES
+  node ./blockchain/data/generateNodes.js $NUM_CONTENT_NODES
+
+# Export all environment variables from the env file.
+if [ ! -f "env/$ENVIRONMENT" ]; then
+  echo "Failed to configure environment: env/$ENVIRONMENT not found"
+  exit 1
+fi
+export $(grep -v '^#' env/$ENVIRONMENT | xargs)
+
+function cli() {
+  docker compose exec -- blockchain earthfast "$@" --network=localhost --abi=deployments/localhost
+}
+
+function cli-tx() {
+  # The key below corresponds with an account in the seed data that's the 
+  # content node operator, and owner of the dev project. It is the 3rd account
+  # derived from the hardhat default mnemonic.
+  cli "$@" --key=0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a
+}
+
+function build-all() {
+  docker compose --profile build-only build
+  docker compose --profile deps build
+  docker compose --profile nodes build
+}
+
+function build-contracts() {
+  # Start blockchain and deploy the smart contracts.
+  docker compose up --detach --remove-orphans blockchain --build
+  deploy-contracts
+
+  # Extract each contract's ABI from the blockchain container and compile it.
+  for contract in nodes projects registry reservations; do
+    local json=$(docker compose exec -- blockchain cat "deployments/localhost/EarthFast${contract^}.json")
+    echo $json | jq .abi | abigen --abi=- --pkg=$contract --out="../src/contracts/$contract/$contract.go"
+  done
+
+  # Cleanup after ourselves
+  docker compose down
+}
+
+function deploy-contracts() {
+  # Wait for the blockchain to be serving. We do this by simply checking if the
+  # JSON-RPC server is responding to requests from within the container.
+  local attempts=0
+  until $(docker compose exec -- blockchain curl http://localhost:8545 > /dev/null 2>&1)
+  do
+      attempts=$((attempts+1))
+      if [ $attempts -gt 20 ]; then
+        echo "ERROR: too many retries waiting for blockchain, giving up!"
+        exit 1
+      fi
+
+      echo "Deploying contracts: waiting for blockchain..."
+      sleep 1
+  done
+  echo "Deploying contracts: blockchain is ready"
+
+  echo "Deploying contracts: running... "
+  docker compose exec -- blockchain npx hardhat deploy --network localhost --data data/dev.json
+  echo "Deploying contracts: DONE"
+  echo
+}
+
+function publish() {
+  local projectName="$1"
+  local bundleName="$2"
+  local checksum="$3"
+
+  # Lookup the project ID from its name.
+  local id=$(cli project list --json | jq -r ".[] | select(.name == \"$projectName\") | .id")
+
+  # If a checksum wasn't provided, look it up via the sites service.
+  if [[ -z $checksum ]]; then
+    checksum=$(docker compose exec -- sites cat manifest.json | jq -r ".\"$bundleName\"")
+  fi
+
+  # Publish the bundle.
+  cli-tx project publish $id http://sites:8080/$bundleName $checksum
+}
+
+function restart() {
+  local service=$1
+  if [[ -z $service ]]; then
+    echo "Usage: $0 restart <service>"
+    exit 1
+  fi
+
+  # Lookup the container ID for the running service.
+  local cid=$(docker compose ps $service --quiet --status=running)
+  if [[ -z $cid ]]; then
+    echo "ERROR: service '$service' is not running"
+    exit 1
+  fi
+
+  # Extract the environment of the currently running container.
+  local env=$(docker container inspect -f "{{ range .Config.Env }}{{ . }} {{ end }}" $cid)
+
+  # Restart the service using the old container's environment.
+  export $env
+  docker compose up --build --detach $service
+}
+
+function start() {
+  build-all
+
+  # Default config.
+  local domainHost="$DOMAIN_NODE_HOST:$DOMAIN_NODE_PORT"
+  local bundleName="hello-world.tgz"
+
+  # Parse command line options to override defaults.
+  while getopts "d:t:c:p:b:" opt; do
+    case ${opt} in
+      d ) domainHost=$OPTARG ;;
+      b ) bundleName=$OPTARG ;;
+      \? )
+        echo "Usage: start [-d domainHost] [-b bundleName]"
+        exit 1
+        ;;
+    esac
+  done
+
+  echo "-------------------------------------------------------"
+  echo "|            Booting Local Dev Environment            |"
+  echo "-------------------------------------------------------"
+  printf "| %-20s %-30s |\n" "Domain Node:" $domainHost
+  printf "| %-20s %-30s |\n" "Content Bundle:" $bundleName
+  echo "-------------------------------------------------------"
+  echo
+
+  # Start blockchain and sites.
+  docker compose --profile deps up --remove-orphans --detach
+
+  # Deploy contracts with seed data.
+  deploy-contracts
+
+  # Publish the seed bundle.
+  publish dev $bundleName
+
+  # Set environment variables that are required by the nodes.
+  export CONTRACT_ADDRESS=$(docker compose exec -- blockchain cat deployments/localhost/EarthfastRegistry.json | jq -r .address)
+  export NODE_ID=$(cli node list --json | jq -r .[0].id)
+  local projectID=$(cli project list --json | jq -r .[0].id)
+  export DOMAIN_TO_PROJECT_MAPPING="$domainHost=$projectID"
+  export DOMAIN_TO_PROJECT_MAPPING_URL=$DOMAIN_TO_PROJECT_MAPPING_URL
+
+  # Start the nodes.
+  # Note: we include the 'deps' profile here to attach their stdouts.
+  docker compose --profile deps --profile nodes up
+}
+
+function stop() {
+  docker compose --profile nodes --profile deps down
+}
+
+# Run a function name in the context of this script.
+eval "$@"

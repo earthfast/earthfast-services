@@ -1,0 +1,41 @@
+name: Create Release PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to update'
+        type: choice
+        required: true 
+        options:
+        - staging
+        - prod
+        - testnet-sepolia
+      imageTag:
+        description: 'Container image tag'
+        required: true
+        type: string
+
+jobs:
+  create-release-pr:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Update content node
+      uses: mikefarah/yq@v4.31.1
+      with:
+        cmd: yq -i '.contentNode.image.tag = "${{ github.event.inputs.imageTag }}"' 'k8s/charts/content-node/values.${{ github.event.inputs.environment }}.yaml'
+
+    - name: Update dnaas
+      uses: mikefarah/yq@v4.31.1
+      with:
+        cmd: yq -i '.domainNode.image.tag = "${{ github.event.inputs.imageTag }}"' 'k8s/charts/dnaas/values.${{ github.event.inputs.environment }}.yaml'
+
+    - name: Create pull request
+      uses: peter-evans/create-pull-request@v4
+      with:
+        title: "Bump ${{ github.event.inputs.environment }} to ${{ github.event.inputs.imageTag }}"
+        commit-message: "Bump ${{ github.event.inputs.environment }} to ${{ github.event.inputs.imageTag }}"
+        branch: "release/${{ github.event.inputs.environment }}/${{ github.event.inputs.imageTag }}"
+        delete-branch: true

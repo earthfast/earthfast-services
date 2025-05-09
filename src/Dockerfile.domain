@@ -1,0 +1,40 @@
+##
+## Build Service Worker
+##
+ARG SERVICE_WORKER_IMAGE=earthfast/service-worker:v0.16.0
+FROM $SERVICE_WORKER_IMAGE AS build_sw
+
+##
+## Build Node Binary
+##
+FROM golang:1.23 AS build_node
+
+WORKDIR /app
+
+COPY go.mod .
+COPY go.sum .
+RUN go mod download
+
+COPY . .
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+go build -o /armada-domain-node ./cmd/armada-domain-node
+
+##
+## Deploy
+##
+FROM debian:12
+RUN apt-get update && apt-get install -y ca-certificates
+
+WORKDIR /
+
+COPY --from=build_node /armada-domain-node /armada-domain-node
+
+ENV WEB_TEMPLATES_DIR=/www/templates
+COPY --from=build_sw /earthfast-sw/dist/templates ${WEB_TEMPLATES_DIR}
+
+ENV WEB_STATIC_DIR=/www/public
+COPY --from=build_sw /earthfast-sw/dist/public ${WEB_STATIC_DIR}
+
+ENV HTTP_PORT=80
+ENTRYPOINT ["/armada-domain-node"]

@@ -1,0 +1,76 @@
+name: 'Docker Build & Publish'
+
+on:
+  workflow_call:
+    inputs:
+      dockerfile:
+        required: true
+        type: string
+      registry:
+        required: true
+        type: string
+      image_name:
+        required: true
+        type: string
+      labels:
+        type: string
+      push:
+        type: boolean
+        default: true
+    secrets:
+      username:
+        required: true
+      password:
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Login against a Docker registry
+      # https://github.com/docker/login-action
+      - name: Log into registry ${{ inputs.registry }}
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ secrets.username }}
+          password: ${{ secrets.password }}
+
+      # Extract metadata (tags, labels) for Docker
+      # https://github.com/docker/metadata-action
+      # first 3 tags are custom so we can get containers with SHAs for each commit and latest on main
+      # last 4 are default from the action
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@507c2f2dc502c992ad446e3d7a5dfbe311567a96
+        with:
+          images: ${{ inputs.registry }}/${{ inputs.image_name }}
+          labels: ${{ inputs.labels }}
+          tags: |
+            type=raw,value=${{ github.head_ref || github.ref_name }}
+            type=sha,format=long,prefix=
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            type=schedule,pattern=nightly,enable=true,priority=1000
+            type=ref,event=branch,enable=true,priority=600
+            type=ref,event=tag,enable=true,priority=600
+            type=ref,event=pr,prefix=pr-,enable=true,priority=600
+
+      # Build and push Docker image with Buildx
+      # https://github.com/docker/build-push-action
+      - name: Build and push Docker image
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: src
+          file: src/${{ inputs.dockerfile }}
+          push: ${{ inputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}

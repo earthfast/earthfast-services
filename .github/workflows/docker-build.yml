@@ -1,0 +1,44 @@
+name: Docker Build for commits
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      push:
+        description: 'Push the Docker images'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-inexorable-content-node:
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      dockerfile: Dockerfile.content
+      registry: docker.io
+      image_name: earthfast/content-node
+      push: true
+      labels: |
+        org.opencontainers.image.title=EarthFast Content Node
+        org.opencontainers.image.url=https://github.com/earthfast
+        org.opencontainers.image.source=https://github.com/earthfast  
+    secrets:
+      username: ${{ secrets.DOCKERHUB_USER }}
+      password: ${{ secrets.DOCKERHUB_PW }}
+
+  build-inexorable-domain-node:
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      dockerfile: Dockerfile.domain
+      registry: docker.io
+      image_name: earthfast/domain-node
+      push: true
+      labels: |
+        org.opencontainers.image.title=EarthFast Domain Node
+        org.opencontainers.image.url=https://github.com/earthfast
+        org.opencontainers.image.source=https://github.com/earthfast
+    secrets:
+      username: ${{ secrets.DOCKERHUB_USER }}
+      password: ${{ secrets.DOCKERHUB_PW }}

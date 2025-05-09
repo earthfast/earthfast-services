@@ -1,0 +1,155 @@
+volumes:
+  prometheus_data:
+  grafana_data:
+
+services:
+  earthfast-contracts:
+    build:
+      context: ${EARTHFAST_CONTRACTS_REPO:-git@github.com:earthfast/earthfast-contracts.git#main}
+      ssh:
+        - default
+    image: earthfast-contracts
+    profiles:
+      - build-only
+
+  blockchain:
+    build:
+      context: blockchain
+      args:
+        - CLI_BRANCH_NAME=${CLI_BRANCH_NAME:-}
+    init: true
+    ports:
+      - 8545:8545
+    profiles:
+      - deps
+    volumes:
+      - type: bind
+        source: blockchain/data
+        target: /earthfast-contracts/data
+      - type: bind
+        source: ${EARTHFAST_CONTRACTS_REPO}/deployments
+        target: /earthfast-contracts/deployments
+
+  sites:
+    build:
+      context: sites
+    ports:
+      - :8080
+    profiles:
+      - deps
+
+  service-worker:
+    build:
+      context: ${ARMADA_SERVICE_WORKER_REPO:-git@github.com:earthfast/service-worker.git#main}
+      ssh:
+        - default
+    image: service-worker
+    profiles:
+      - build-only
+
+  domain:
+    build:
+      args:
+        SERVICE_WORKER_IMAGE: service-worker
+      context: ../src
+      dockerfile: Dockerfile.domain
+    environment:
+      - CONTRACT_ADDRESS
+      - DOMAIN_TO_PROJECT_MAPPING
+      - DOMAIN_TO_PROJECT_MAPPING_URL
+      - ETH_RPC_ENDPOINT=http://blockchain:8545
+      - LOG_LEVEL=debug
+      - IP_LOOKUP_API_KEY
+      - ENVIRONMENT
+    ports:
+      - ${DOMAIN_NODE_PORT}:80
+    profiles:
+      - nodes
+    extra_hosts:
+      - dev-content-0-1__80.armadalocal.test:host-gateway
+      - dev-content-1-1__80.armadalocal.test:host-gateway
+      - dev-content-2-1__80.armadalocal.test:host-gateway
+      - dev-content-3-1__80.armadalocal.test:host-gateway
+      - dev-content-4-1__80.armadalocal.test:host-gateway
+      - dev-content-5-1__80.armadalocal.test:host-gateway
+      - dev-content-6-1__80.armadalocal.test:host-gateway
+      - dev-content-7-1__80.armadalocal.test:host-gateway
+      - dev-content-8-1__80.armadalocal.test:host-gateway
+      - dev-content-9-1__80.armadalocal.test:host-gateway
+      - dev-content-10-1__80.armadalocal.test:host-gateway
+      # todo - make this dynamic in docker-compose-generate.sh script
+
+  content-0:
+    extends:
+      service: content-template
+    environment:
+      - NODE_ID=0x405787fa12a823e0f2b7631cc41b3ba8828b3321ca811111fa75cd3aa3b30082
+      # - DISABLE_NGINX=true
+    ports:
+      - 30082:80
+
+  # This is the content service as a template which `docker-compose-generate.sh` will use to create the other content nodes
+  content-template:
+    build:
+      context: ../src
+      dockerfile: Dockerfile.content
+      args:
+        - GIT_SHA=${GIT_SHA:-$(shell git rev-parse HEAD)}
+    environment:
+      - CONTRACT_ADDRESS
+      - DATABASE_DIR=/db
+      - ETH_RPC_ENDPOINT=http://blockchain:8545
+      - HOSTING_CACHE_DIR=/www
+      - LOG_LEVEL=debug
+      - GIT_SHA
+    profiles:
+      - nodes
+
+  dozzle:
+    container_name: dozzle
+    image: amir20/dozzle:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - 8888:8080
+
+  nginx:
+    container_name: nginx
+    image: nginx:latest
+    ports:
+      - 443:443
+      - 80:80
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./ssl_key:/etc/nginx/ssl
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    user: root
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3090:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/content-node.json
+    depends_on:
+      - prometheus
